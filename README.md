@@ -6,19 +6,34 @@ Crashwalk
 Unless you are a hacker or a weirdo this is not what you are looking for.
 
 ```bash
-$ ./pdftok /Users/ben/scratch/pdfs/test_pdfa_gray.pdf | head -10
-main.item{typ:11, pos:0, val:"%PDF-1.3"}
+$ ./pdftok *.pdf
+main.item{typ:11, pos:0, val:"%PDF-1.1"}
 main.item{typ:3, pos:8, val:"\n"}
-main.item{typ:11, pos:9, val:"%\xe2\xe3\xcf\xd3"}
-main.item{typ:3, pos:14, val:"\r\n"}
-main.item{typ:2, pos:16, val:"3"}
-main.item{typ:3, pos:17, val:" "}
-main.item{typ:2, pos:18, val:"0"}
+main.item{typ:11, pos:9, val:"%¥±ë"}
+main.item{typ:3, pos:16, val:"\n\n"}
+main.item{typ:2, pos:18, val:"1"}
 main.item{typ:3, pos:19, val:" "}
-main.item{typ:15, pos:20, val:"obj"}
-main.item{typ:3, pos:23, val:"\n"}
+main.item{typ:2, pos:20, val:"0"}
+main.item{typ:3, pos:21, val:" "}
+main.item{typ:15, pos:22, val:"obj"}
+main.item{typ:3, pos:25, val:"\n  "}
+main.item{typ:4, pos:28, val:"<<"}
+main.item{typ:3, pos:30, val:" "}
+main.item{typ:12, pos:31, val:"/Type"}
+main.item{typ:3, pos:36, val:" "}
+main.item{typ:12, pos:37, val:"/Catalog"}
+main.item{typ:3, pos:45, val:"\n     "}
+main.item{typ:12, pos:51, val:"/Pages"}
+main.item{typ:3, pos:57, val:" "}
+main.item{typ:2, pos:58, val:"2"}
+main.item{typ:3, pos:59, val:" "}
+main.item{typ:2, pos:60, val:"0"}
+main.item{typ:3, pos:61, val:" "}
+main.item{typ:13, pos:62, val:"R"}
 [...]
 ```
+
+Obviously you can `grep` `sed` `cut` or whatever. If you're a Go user, the lexing API is dirt simple ( check [main.go](main.go) ) if you want to do something cooler. If you do, shoot me a PR.
 
 Token types (EOF -> 1, itemNumber -> 2 etc):
 ```go
