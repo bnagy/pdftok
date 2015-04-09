@@ -7,7 +7,7 @@
 // Imitation is the sincerest form of flattery.
 // (c) Ben Nagy 2015
 
-package main
+package pdflex
 
 import (
 	"fmt"
@@ -19,42 +19,42 @@ import (
 type Pos int
 
 // item represents a token or text string returned from the scanner.
-type item struct {
-	typ itemType // The type of this item.
-	pos Pos      // The starting position, in bytes, of this item in the input string.
-	val string   // The value of this item.
+type Item struct {
+	Typ ItemType // The type of this item.
+	Pos Pos      // The starting position, in bytes, of this item in the input string.
+	Val string   // The value of this item.
 }
 
 // itemType identifies the type of lex items.
-type itemType int
+type ItemType int
 
 const (
-	itemError itemType = iota // error occurred; value is text of error
-	itemEOF
-	itemNumber    // PDF Number 7.3.3
-	itemSpace     // run of space characters 7.2.2 Table 1
-	itemLeftDict  // Just the << token
-	itemRightDict // >> token
-	itemLeftArray
-	itemRightArray
-	itemStreamBody // raw contents of a stream
-	itemString     // PDF Literal String 7.3.4.2
-	itemHexString  // PDF Hex String 7.3.4.3
-	itemComment    // 7.2.3
-	itemName       // PDF Name Object 7.3.5
-	itemWord       // catchall for an unrecognised blob of alnums
+	ItemError ItemType = iota // error occurred; value is text of error
+	ItemEOF
+	ItemNumber    // PDF Number 7.3.3
+	ItemSpace     // run of space characters 7.2.2 Table 1
+	ItemLeftDict  // Just the << token
+	ItemRightDict // >> token
+	ItemLeftArray
+	ItemRightArray
+	ItemStreamBody // raw contents of a stream
+	ItemString     // PDF Literal String 7.3.4.2
+	ItemHexString  // PDF Hex String 7.3.4.3
+	ItemComment    // 7.2.3
+	ItemName       // PDF Name Object 7.3.5
+	ItemWord       // catchall for an unrecognised blob of alnums
 	// Keywords appear after all the rest.
-	itemKeyword // used only to delimit the keywords
-	itemObj     // just the obj and endobj markers
-	itemEndObj
-	itemStream // just the markers
-	itemEndStream
-	itemTrailer
-	itemXref
-	itemStartXref
-	itemTrue  // not really keywords, they're actually types of
-	itemFalse // PDF Basic Object, but this is cleaner 7.3.2
-	itemNull
+	ItemKeyword // used only to delimit the keywords
+	ItemObj     // just the obj and endobj markers
+	ItemEndObj
+	ItemStream // just the markers
+	ItemEndStream
+	ItemTrailer
+	ItemXref
+	ItemStartXref
+	ItemTrue  // not really keywords, they're actually types of
+	ItemFalse // PDF Basic Object, but this is cleaner 7.3.2
+	ItemNull
 )
 
 // If they need to be used directly in code then a constant string is easiest
@@ -82,24 +82,24 @@ var keytoks = map[string]itemType{
 const eof = -1
 
 // stateFn represents the state of the scanner as a function that returns the next state.
-type stateFn func(*lexer) stateFn
+type stateFn func(*Lexer) stateFn
 
 // lexer holds the state of the scanner.
-type lexer struct {
+type Lexer struct {
 	name       string    // the name of the input; used only for error reports
 	input      string    // the string being scanned
 	state      stateFn   // the next lexing function to enter
-	pos        Pos       // current position in the input
-	start      Pos       // start position of this item
-	width      Pos       // width of last rune read from input
-	lastPos    Pos       // position of most recent item returned by nextItem
+	Pos        Pos       // current position in the input
+	Start      Pos       // start position of this item
+	Width      Pos       // width of last rune read from input
+	LastPos    Pos       // position of most recent item returned by nextItem
 	items      chan item // channel of scanned items
 	arrayDepth int       // nesting depth of [], <<>>
 	dictDepth  int
 }
 
 // next returns the next rune in the input.
-func (l *lexer) next() rune {
+func (l *Lexer) next() rune {
 	if int(l.pos) >= len(l.input) {
 		l.width = 0
 		return eof
@@ -111,30 +111,30 @@ func (l *lexer) next() rune {
 }
 
 // peek returns but does not consume the next rune in the input.
-func (l *lexer) peek() rune {
+func (l *Lexer) peek() rune {
 	r := l.next()
 	l.backup()
 	return r
 }
 
 // backup steps back one rune. Must only be called once per call of next.
-func (l *lexer) backup() {
+func (l *Lexer) backup() {
 	l.pos -= l.width
 }
 
 // emit passes an item back to the client.
-func (l *lexer) emit(t itemType) {
+func (l *Lexer) emit(t itemType) {
 	l.items <- item{t, l.start, l.input[l.start:l.pos]}
 	l.start = l.pos
 }
 
 // ignore skips over the pending input before this point.
-func (l *lexer) ignore() {
+func (l *Lexer) ignore() {
 	l.start = l.pos
 }
 
 // accept consumes the next rune if it's from the valid set.
-func (l *lexer) accept(valid string) bool {
+func (l *Lexer) accept(valid string) bool {
 	if strings.IndexRune(valid, l.next()) >= 0 {
 		return true
 	}
@@ -143,7 +143,7 @@ func (l *lexer) accept(valid string) bool {
 }
 
 // acceptRun consumes a run of runes from the valid set.
-func (l *lexer) acceptRun(valid string) {
+func (l *Lexer) acceptRun(valid string) {
 	for strings.IndexRune(valid, l.next()) >= 0 {
 	}
 	l.backup()
@@ -152,26 +152,26 @@ func (l *lexer) acceptRun(valid string) {
 // lineNumber reports which line we're on, based on the position of
 // the previous item returned by nextItem. Doing it this way
 // means we don't have to worry about peek double counting.
-func (l *lexer) lineNumber() int {
+func (l *Lexer) LineNumber() int {
 	return 1 + strings.Count(l.input[:l.lastPos], "\n")
 }
 
 // errorf returns an error token and terminates the scan by passing
 // back a nil pointer that will be the next state, terminating l.nextItem.
-func (l *lexer) errorf(format string, args ...interface{}) stateFn {
+func (l *Lexer) errorf(format string, args ...interface{}) stateFn {
 	l.items <- item{itemError, l.start, fmt.Sprintf(format, args...)}
 	return nil
 }
 
 // nextItem returns the next item from the input.
-func (l *lexer) nextItem() item {
+func (l *Lexer) NextItem() item {
 	item := <-l.items
 	l.lastPos = item.pos
 	return item
 }
 
 // lex creates a new scanner for the input string.
-func lex(name, input string) *lexer {
+func NewLexer(name, input string) *Lexer {
 	l := &lexer{
 		name:  name,
 		input: input,
@@ -182,7 +182,7 @@ func lex(name, input string) *lexer {
 }
 
 // run runs the state machine for the lexer.
-func (l *lexer) run() {
+func (l *Lexer) run() {
 	for l.state = lexDefault; l.state != nil; {
 		l.state = l.state(l)
 	}
@@ -192,7 +192,7 @@ func (l *lexer) run() {
 
 // lexDefault is the main lexing state. The rules here work for the root
 // namespace, as well as inside dicts <<>> and arrays [].
-func lexDefault(l *lexer) stateFn {
+func lexDefault(l *Lexer) stateFn {
 	switch r := l.next(); {
 	case unicode.IsSpace(r):
 		return lexSpace
@@ -259,7 +259,7 @@ func lexDefault(l *lexer) stateFn {
 
 // lexStream quickly skips over all the contents of PDF stream objects. The
 // 'stream' header has already been consumed and emitted in lexWord.
-func lexStream(l *lexer) stateFn {
+func lexStream(l *Lexer) stateFn {
 	i := strings.Index(l.input[l.pos:], rightStream)
 	if i < 0 {
 		return l.errorf("unclosed stream")
@@ -272,7 +272,7 @@ func lexStream(l *lexer) stateFn {
 }
 
 // lexLeftDict scans the left delimiter, which is known to be present.
-func lexLeftDict(l *lexer) stateFn {
+func lexLeftDict(l *Lexer) stateFn {
 	l.pos += Pos(len(leftDict))
 	l.emit(itemLeftDict)
 	return lexDefault
@@ -283,7 +283,7 @@ func lexLeftDict(l *lexer) stateFn {
 // comments such as %%EOF and %PDF-1.7 are special to reader software, but
 // that's parser business.
 // cf PDF3200_2008.pdf 7.2.2
-func lexComment(l *lexer) stateFn {
+func lexComment(l *Lexer) stateFn {
 
 	var r rune
 	for !isEndOfLine(l.peek()) {
@@ -300,7 +300,7 @@ func lexComment(l *lexer) stateFn {
 }
 
 // lexRightDict scans the right delimiter, which is known to be present.
-func lexRightDict(l *lexer) stateFn {
+func lexRightDict(l *Lexer) stateFn {
 	l.pos += Pos(len(rightDict))
 	l.emit(itemRightDict)
 	return lexDefault
@@ -310,7 +310,7 @@ func lexRightDict(l *lexer) stateFn {
 // run of non-special characters. Unprintable ASCII must be escaped with '#XX'
 // codes.
 // cf PDF3200_2008.pdf 7.3.5
-func lexName(l *lexer) stateFn {
+func lexName(l *Lexer) stateFn {
 	for {
 		switch r := l.next(); {
 		case isDelim(r) || unicode.IsSpace(r) || r == eof:
@@ -331,7 +331,7 @@ func lexName(l *lexer) stateFn {
 // do with parsing linebreaks and escaped special chars, but that's above our
 // pay grade here.
 // cf PDF3200_2008.pdf 7.3.4.2
-func lexStringObj(l *lexer) stateFn {
+func lexStringObj(l *Lexer) stateFn {
 	balance := 1
 	for {
 		switch r := l.next(); {
@@ -356,7 +356,7 @@ func lexStringObj(l *lexer) stateFn {
 // lexHexObj scans a hex string, which is any number of hexadecimal characters
 // or whitespace enclosed by '<' '>'. The '<' rune has already been consumed.
 // cf PDF3200_2008.pdf 7.3.4.3
-func lexHexObj(l *lexer) stateFn {
+func lexHexObj(l *Lexer) stateFn {
 	digits := "0123456789abcdefABCDEF"
 	for {
 		switch r := l.next(); {
@@ -375,7 +375,7 @@ func lexHexObj(l *lexer) stateFn {
 
 // lexSpace scans a run of space characters one of which has already been seen.
 // cf PDF3200_2008.pdf 7.2.2
-func lexSpace(l *lexer) stateFn {
+func lexSpace(l *Lexer) stateFn {
 	// This is more permissive than the spec, which doesn't mention U+0085
 	// (NEL), U+00A0 (NBSP)
 	for unicode.IsSpace(l.peek()) {
@@ -389,7 +389,7 @@ func lexSpace(l *lexer) stateFn {
 // will emit known tokens as their special types, call new state functions for
 // types that require special lexing, and, failing that, emit the run as a
 // catchall itemWord and then return to lexDefault
-func lexWord(l *lexer) stateFn {
+func lexWord(l *Lexer) stateFn {
 
 	for isAlphaNumeric(l.peek()) {
 		l.next()
@@ -413,7 +413,7 @@ func lexWord(l *lexer) stateFn {
 
 // lexNumber scans a decimal or real number
 // cf PDF3200_2008.pdf 7.3.3
-func lexNumber(l *lexer) stateFn {
+func lexNumber(l *Lexer) stateFn {
 	if !l.scanNumber() {
 		return l.errorf("bad number syntax: %q", l.input[l.start:l.pos])
 	}
@@ -421,7 +421,7 @@ func lexNumber(l *lexer) stateFn {
 	return lexDefault
 }
 
-func (l *lexer) scanNumber() bool {
+func (l *Lexer) scanNumber() bool {
 	// Optional leading sign.
 	l.accept("+-")
 	digits := "0123456789"
